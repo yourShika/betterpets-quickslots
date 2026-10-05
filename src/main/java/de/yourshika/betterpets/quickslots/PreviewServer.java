@@ -17,13 +17,20 @@ import java.util.List;
  * assigning and switching - runs for real instead of being fed canned data.
  *
  * <p>It speaks the same {@link QuickslotProtocol} bytes the plugin does, with the plugin's rules reduced
- * to the bare minimum (no cooldowns, no ownership checks). Only ever registered in preview mode.</p>
+ * to the bare minimum: it announces a cooldown and can announce a lockout, but enforces neither and checks
+ * no ownership - which is exactly what lets the preview see whether the mod holds back by itself. Only
+ * ever registered in preview mode.</p>
  */
 final class PreviewServer {
+
+    /** The cooldown the "server" announces, in milliseconds. */
+    static final int COOLDOWN_MILLIS = 500;
 
     private static List<QuickslotProtocol.Pet> pets = List.of();
     private static final List<String> slots = new ArrayList<>();
     private static String active = "";
+    private static int switchRequests;
+    private static int lockoutMillis;
 
     private PreviewServer() {
     }
@@ -44,6 +51,20 @@ final class PreviewServer {
     /** What the "server" currently holds in a slot - for the preview to check a request really arrived. */
     static synchronized String slot(final int index) {
         return slots.get(index);
+    }
+
+    /** How many requests to switch, cycle or put away have arrived so far. */
+    static synchronized int switchRequests() {
+        return switchRequests;
+    }
+
+    /**
+     * Tells the player that quick switching is locked for a while (0 lifts the lock), the way the plugin
+     * does after too many switches. Call on the server thread.
+     */
+    static synchronized void lock(final ServerPlayer player, final int millis) {
+        lockoutMillis = millis;
+        sendState(player);
     }
 
     /**
@@ -88,12 +109,14 @@ final class PreviewServer {
                 }
             }
             case QuickslotProtocol.Switch target -> {
+                switchRequests++;
                 if (target.slot() >= 0 && target.slot() < slots.size() && !slots.get(target.slot()).isEmpty()) {
                     final String petId = slots.get(target.slot());
                     active = petId.equals(active) ? "" : petId;
                 }
             }
             case QuickslotProtocol.Cycle step -> {
+                switchRequests++;
                 final int current = slots.indexOf(active);
                 for (int i = 1; i <= slots.size(); i++) {
                     final String candidate = slots.get(Math.floorMod(current + step.direction() * i, slots.size()));
@@ -103,12 +126,19 @@ final class PreviewServer {
                     }
                 }
             }
-            case QuickslotProtocol.Despawn ignored -> active = "";
+            case QuickslotProtocol.Despawn ignored -> {
+                switchRequests++;
+                active = "";
+            }
         }
         if (sendPets) {
             send(player, new QuickslotProtocol.Pets(pets.hashCode(), pets));
         }
-        send(player, new QuickslotProtocol.State(QuickslotProtocol.VERSION, true, slots, active, 500, true, pets.hashCode()));
+        sendState(player);
+    }
+
+    private static void sendState(final ServerPlayer player) {
+        send(player, new QuickslotProtocol.State(QuickslotProtocol.VERSION, true, slots, active, COOLDOWN_MILLIS, true, pets.hashCode(), lockoutMillis));
     }
 
     private static void send(final ServerPlayer player, final QuickslotProtocol.ServerMessage message) {

@@ -1,31 +1,26 @@
 package de.yourshika.betterpets.quickslots;
 
-import de.kamil.betterpets.quickslots.QuickslotProtocol;
+import de.yourshika.betterpets.quickslots.ui.Anim;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.ARGB;
-import net.minecraft.util.Util;
-
-import java.util.List;
 
 /**
- * A slot bar that appears above the hotbar for a moment whenever the summoned pet changes, so a key press
- * shows what it did - which pet is out now and where it sits among the slots - and then gets out of the
- * way again. Can be switched off in the slot screen.
+ * The quickslot display on the HUD. When it shows and what it looks like is the player's choice (see the
+ * settings screen): after a change of pet, while the modifier key is held, all the time - as a row of
+ * slots, a ring, or just the pet that is out. The drawing itself is {@link HudRenderer}'s.
  */
 final class QuickslotHud {
 
-    private static final long VISIBLE_MILLIS = 1800L;
-    private static final long FADE_MILLIS = 350L;
-    private static final int TILE = 20;
-    private static final int GAP = 2;
+    /** How long a refused switch keeps the display up, so the cooldown or lock it shows can be read. */
+    private static final long REFUSAL_MILLIS = 1100L;
 
-    private static long shownAt;
+    private static final HudRenderer.Motion MOTION = new HudRenderer.Motion();
+    private static final Anim.FrameTimer TIMER = new Anim.FrameTimer();
+    private static long changedAt;
 
     private QuickslotHud() {
     }
@@ -35,64 +30,44 @@ final class QuickslotHud {
             Identifier.fromNamespaceAndPath(BetterPetsQuickslots.MOD_ID, "slot_bar"), QuickslotHud::extract);
     }
 
-    /** Shows the bar now (called when the server reports a different active pet). */
-    static void flash() {
-        shownAt = Util.getMillis();
+    /** The server reported a different active pet. */
+    static void onPetChanged() {
+        changedAt = Anim.now();
+        MOTION.changedAt = changedAt;
     }
 
-    static void hide() {
-        shownAt = 0L;
+    /** A switch was not requested (cooldown or lock): show why instead. */
+    static void onRefused() {
+        MOTION.refusedAt = Anim.now();
+    }
+
+    static void reset() {
+        changedAt = 0L;
+        MOTION.presence = 0.0F;
+        MOTION.changedAt = 0L;
+        MOTION.refusedAt = 0L;
     }
 
     private static void extract(final GuiGraphicsExtractor graphics, final DeltaTracker deltaTracker) {
-        if (shownAt == 0L || !ModConfig.hudEnabled() || !QuickslotClient.usable()) {
-            return;
-        }
-        final long age = Util.getMillis() - shownAt;
-        if (age > VISIBLE_MILLIS) {
-            shownAt = 0L;
-            return;
-        }
+        final float delta = TIMER.tick();
+        final ModConfig.Values config = ModConfig.get();
         final Minecraft client = Minecraft.getInstance();
-        // F1 hides the whole HUD; this bar belongs to it.
-        if (client.gui.hud.isHidden()) {
+        final long now = Anim.now();
+        final boolean wanted = config.hudStyle != ModConfig.HudStyle.OFF
+            && QuickslotClient.usable()
+            // F1 hides the whole HUD, the wheel shows the slots itself, and the settings have their preview.
+            && !client.gui.hud.isHidden()
+            && !(client.gui.screen() instanceof WheelScreen)
+            && !(client.gui.screen() instanceof SettingsScreen)
+            && (config.hudAlways
+                || config.hudOnChange && changedAt != 0L && now - changedAt < (long) (config.hudSeconds * 1000.0F)
+                || config.hudWhileModifier && Keybinds.modifierActive()
+                || MOTION.refusedAt != 0L && now - MOTION.refusedAt < REFUSAL_MILLIS);
+        MOTION.presence = Anim.approach(MOTION.presence, wanted ? 1.0F : 0.0F, wanted ? 16.0F : 9.0F, delta);
+        if (MOTION.presence <= 0.01F) {
             return;
         }
-        final List<String> slots = QuickslotClient.slots();
-        if (slots.isEmpty()) {
-            return;
-        }
-        // Fades out over the last moments instead of popping away.
-        final float alpha = age > VISIBLE_MILLIS - FADE_MILLIS ? (VISIBLE_MILLIS - age) / (float) FADE_MILLIS : 1.0F;
-
-        final String activeId = QuickslotClient.activeId();
-        final int width = slots.size() * TILE + (slots.size() - 1) * GAP;
-        final int left = (graphics.guiWidth() - width) / 2;
-        // Clear of the hotbar, the health/food rows and the item-name line above them.
-        final int top = graphics.guiHeight() - 22 - 46 - TILE;
-
-        graphics.fill(left - 3, top - 3, left + width + 3, top + TILE + 3, ARGB.color(alpha * 0.55F, 0x000000));
-        for (int slot = 0; slot < slots.size(); slot++) {
-            final int x = left + slot * (TILE + GAP);
-            final String petId = slots.get(slot);
-            final QuickslotProtocol.Pet pet = petId.isEmpty() ? null : QuickslotClient.pet(petId);
-            final boolean active = !petId.isEmpty() && petId.equals(activeId);
-            graphics.fill(x, top, x + TILE, top + TILE, ARGB.color(alpha * (active ? 0.75F : 0.45F), active ? 0x3A3420 : 0x101014));
-            graphics.outline(x, top, TILE, TILE, ARGB.color(alpha, active ? 0xFFC83C : 0x4A4A56));
-            // Items cannot be drawn translucent, so they simply drop out once the bar is mostly faded.
-            if (pet != null && alpha > 0.5F) {
-                graphics.fakeItem(PetIcons.head(pet.texture()), x + 2, top + 2);
-            }
-        }
-
-        final QuickslotProtocol.Pet activePet = activeId.isEmpty() ? null : QuickslotClient.pet(activeId);
-        final Component label = activePet == null
-            ? Component.translatable(BetterPetsQuickslots.MOD_ID + ".hud.put_away")
-            : Component.literal(activePet.name());
-        final int color = ARGB.color(alpha, activePet == null ? 0xA8A8B4 : activePet.color());
-        // Text with a (near) zero alpha would be drawn fully opaque by the font renderer; skip it then.
-        if (alpha > 0.05F) {
-            graphics.centeredText(client.font, label, graphics.guiWidth() / 2, top - 13, color);
-        }
+        HudRenderer.draw(graphics, SlotView.live(), config, MOTION, 0, 0, graphics.guiWidth(), graphics.guiHeight(),
+            QuickslotClient.cooldownRemaining(), QuickslotClient.lockRemainingMillis());
     }
 }

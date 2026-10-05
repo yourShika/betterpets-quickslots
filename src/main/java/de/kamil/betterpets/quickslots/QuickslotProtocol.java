@@ -16,9 +16,9 @@ import java.util.List;
  * projects, so the two sides can never drift apart: neither Bukkit nor Minecraft types appear here. Every
  * message is one opcode byte followed by its fields, written with {@link DataOutputStream}.</p>
  *
- * <p>Compatibility rules: fields are only ever appended, readers ignore trailing bytes they do not know,
- * and unknown opcodes decode to {@code null} (ignored) - so an older mod keeps working against a newer
- * plugin and vice versa.</p>
+ * <p>Compatibility rules: fields are only ever appended; a reader ignores trailing bytes it does not know
+ * and falls back to a default for appended fields the peer did not send; unknown opcodes decode to
+ * {@code null} (ignored). So an older mod keeps working against a newer plugin and vice versa.</p>
  */
 public final class QuickslotProtocol {
 
@@ -147,9 +147,12 @@ public final class QuickslotProtocol {
      * @param cooldownMillis   minimum time between two switches
      * @param sameSlotDespawns whether pressing the active pet's slot again puts the pet away
      * @param petsRevision     changes whenever the pet list ({@link Pets}) would look different
+     * @param lockoutMillis    how long quick switching stays locked from now on because of too many
+     *                         switches (0 = not locked). Appended in plugin 1.33; older plugins do not
+     *                         send it and it then reads as 0.
      */
     public record State(int version, boolean enabled, List<String> slots, String activeId, int cooldownMillis,
-                        boolean sameSlotDespawns, int petsRevision) implements ServerMessage {
+                        boolean sameSlotDespawns, int petsRevision, int lockoutMillis) implements ServerMessage {
         public State {
             slots = List.copyOf(slots);
         }
@@ -202,6 +205,7 @@ public final class QuickslotProtocol {
                     out.writeInt(state.cooldownMillis());
                     out.writeBoolean(state.sameSlotDespawns());
                     out.writeInt(state.petsRevision());
+                    out.writeInt(state.lockoutMillis());
                 }
                 case Pets pets -> {
                     out.writeByte(S_PETS);
@@ -249,7 +253,13 @@ public final class QuickslotProtocol {
                 for (int i = 0; i < count; i++) {
                     slots.add(in.readUTF());
                 }
-                return new State(version, enabled, slots, in.readUTF(), in.readInt(), in.readBoolean(), in.readInt());
+                final String activeId = in.readUTF();
+                final int cooldownMillis = in.readInt();
+                final boolean sameSlotDespawns = in.readBoolean();
+                final int petsRevision = in.readInt();
+                // Fields appended later are optional: a peer from before they existed simply ends here.
+                final int lockoutMillis = in.available() >= Integer.BYTES ? in.readInt() : 0;
+                return new State(version, enabled, slots, activeId, cooldownMillis, sameSlotDespawns, petsRevision, lockoutMillis);
             }
             case S_PETS -> {
                 final int revision = in.readInt();

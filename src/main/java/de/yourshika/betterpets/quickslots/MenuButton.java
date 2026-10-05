@@ -2,9 +2,10 @@ package de.yourshika.betterpets.quickslots;
 
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
+import de.yourshika.betterpets.quickslots.ui.Draw;
+import de.yourshika.betterpets.quickslots.ui.Sprites;
+import de.yourshika.betterpets.quickslots.ui.TextButton;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.network.chat.Component;
@@ -20,7 +21,7 @@ import net.minecraft.network.chat.Component;
 final class MenuButton {
 
     private static final int PANEL_WIDTH = 176;
-    private static final int WIDTH = 78;
+    private static final int WIDTH = 84;
     private static final int HEIGHT = 20;
 
     private MenuButton() {
@@ -54,12 +55,9 @@ final class MenuButton {
             y = Math.max(0, top - 2);
         }
 
-        Screens.getWidgets(screen).add(Button.builder(
-                Component.translatable(BetterPetsQuickslots.MOD_ID + ".menu_button"),
-                button -> QuickslotClient.openScreen(client))
-            .bounds(x, y, WIDTH, HEIGHT)
-            .tooltip(Tooltip.create(Component.translatable(BetterPetsQuickslots.MOD_ID + ".menu_button.tooltip",
-                Keybinds.openScreen.getTranslatedKeyMessage())))
-            .build());
+        final TextButton button = new TextButton(x, y, WIDTH, HEIGHT, Component.translatable(BetterPetsQuickslots.MOD_ID + ".menu_button"),
+            Sprites.ICON_FOX, () -> QuickslotClient.openScreen(client));
+        button.setTooltip(Draw.tooltip(Component.translatable(BetterPetsQuickslots.MOD_ID + ".menu_button.tooltip", Keybinds.label(Keybinds.openScreen))));
+        Screens.getWidgets(screen).add(button);
     }
 }

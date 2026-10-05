@@ -23,6 +23,11 @@ import java.util.Map;
  * {@link QuickslotProtocol.State}/{@link QuickslotProtocol.Pets} it sends back. Until a state arrived
  * (a server without the plugin never sends one) the mod does nothing but say so when a key is pressed.</p>
  *
+ * <p>The mod is also polite about it: a switch is only requested when the server would accept one - not
+ * during the cooldown it announced, not while it has locked switching after too many of them. The server
+ * enforces both anyway; holding back here just keeps a hammered key from turning into a stream of
+ * pointless requests, and lets the display show the wait instead.</p>
+ *
  * <p>All of this runs on the client thread.</p>
  */
 final class QuickslotClient {
@@ -32,6 +37,8 @@ final class QuickslotClient {
     private static final long PETS_REQUEST_INTERVAL_MILLIS = 1000L;
     /** How long after the plugin's "menu opens now" note a container screen counts as that menu. */
     private static final long MENU_MARKER_MILLIS = 3000L;
+    /** The least time between two switch requests, so a double press cannot outrun the server's answer. */
+    private static final long MIN_REQUEST_GAP_MILLIS = 150L;
 
     private static QuickslotProtocol.State state;
     private static List<QuickslotProtocol.Pet> pets = List.of();
@@ -43,6 +50,10 @@ final class QuickslotClient {
     private static long lastPetsRequestMillis;
     private static long menuMarkerMillis;
     private static int menuContainerId = -1;
+    // Throttling, on the client's own clock.
+    private static long lastRequestMillis;
+    private static long lastSwitchMillis;
+    private static long lockedUntilMillis;
 
     private QuickslotClient() {
     }
@@ -62,6 +73,7 @@ final class QuickslotClient {
                 client.execute(QuickslotClient::sayHello);
             }
         });
+        ClientTickEvents.START_CLIENT_TICK.register(Keybinds::pollEarly);
         ClientTickEvents.END_CLIENT_TICK.register(QuickslotClient::tick);
     }
 
@@ -82,7 +94,10 @@ final class QuickslotClient {
         lastHelloMillis = 0L;
         menuMarkerMillis = 0L;
         menuContainerId = -1;
-        QuickslotHud.hide();
+        lastRequestMillis = 0L;
+        lastSwitchMillis = 0L;
+        lockedUntilMillis = 0L;
+        QuickslotHud.reset();
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -110,15 +125,18 @@ final class QuickslotClient {
 
     private static void accept(final QuickslotProtocol.State next) {
         final QuickslotProtocol.State previous = state;
+        final long now = Util.getMillis();
         state = next;
+        lockedUntilMillis = next.lockoutMillis() > 0 ? now + next.lockoutMillis() : 0L;
         // Not on the first state after joining: only an actual change of pet is worth showing.
         if (previous != null && !previous.activeId().equals(next.activeId())) {
-            QuickslotHud.flash();
+            lastSwitchMillis = now;
+            QuickslotHud.onPetChanged();
         }
         // The server pushes the list whenever it changes; asking is only the safety net.
         if ((!petsKnown || petsRevision != next.petsRevision())
-            && Util.getMillis() - lastPetsRequestMillis > PETS_REQUEST_INTERVAL_MILLIS) {
-            lastPetsRequestMillis = Util.getMillis();
+            && now - lastPetsRequestMillis > PETS_REQUEST_INTERVAL_MILLIS) {
+            lastPetsRequestMillis = now;
             send(new QuickslotProtocol.RequestPets());
         }
     }
@@ -161,7 +179,7 @@ final class QuickslotClient {
     }
 
     // ------------------------------------------------------------------------------------------------
-    // Actions (key presses and the screen)
+    // Actions (keys, the wheel and the screens)
     // ------------------------------------------------------------------------------------------------
 
     /** Summons the pet in a slot (0-based); pressing the active pet's slot may put it away, per server. */
@@ -173,19 +191,37 @@ final class QuickslotClient {
             notice(Component.translatable("betterpets-quickslots.notice.no_such_slot", slot + 1, state.slots().size()));
             return;
         }
-        send(new QuickslotProtocol.Switch(slot));
+        if (mayRequestSwitch()) {
+            send(new QuickslotProtocol.Switch(slot));
+        }
     }
 
     static void cycle(final int direction) {
-        if (checkUsable()) {
+        if (checkUsable() && mayRequestSwitch()) {
             send(new QuickslotProtocol.Cycle(direction));
         }
     }
 
     static void putAway() {
-        if (checkUsable()) {
+        if (checkUsable() && mayRequestSwitch()) {
             send(new QuickslotProtocol.Despawn());
         }
+    }
+
+    /**
+     * Whether a switch would be accepted right now. If not, nothing is sent and the display shows the
+     * wait instead.
+     */
+    private static boolean mayRequestSwitch() {
+        final long now = Util.getMillis();
+        if (now < lockedUntilMillis
+            || now - lastSwitchMillis < state.cooldownMillis()
+            || now - lastRequestMillis < MIN_REQUEST_GAP_MILLIS) {
+            QuickslotHud.onRefused();
+            return false;
+        }
+        lastRequestMillis = now;
+        return true;
     }
 
     /** Parks a pet in a slot ({@code ""} empties it) and shows the result at once. */
@@ -203,18 +239,7 @@ final class QuickslotClient {
         }
         slots.set(slot, petId);
         state = new QuickslotProtocol.State(state.version(), state.enabled(), slots, state.activeId(),
-            state.cooldownMillis(), state.sameSlotDespawns(), state.petsRevision());
-    }
-
-    static void clearAll() {
-        if (!usable()) {
-            return;
-        }
-        for (int slot = 0; slot < state.slots().size(); slot++) {
-            if (!state.slots().get(slot).isEmpty()) {
-                assign(slot, "");
-            }
-        }
+            state.cooldownMillis(), state.sameSlotDespawns(), state.petsRevision(), state.lockoutMillis());
     }
 
     /** Opens the slot screen (closing the plugin's chest menu properly if that is what is open). */
@@ -227,6 +252,13 @@ final class QuickslotClient {
             client.player.closeContainer();
         }
         client.gui.setScreen(new QuickslotScreen());
+    }
+
+    /** Opens the pet wheel, if there is anything to choose from. */
+    static void openWheel(final Minecraft client) {
+        if (client.player != null && client.gui.screen() == null && checkUsable()) {
+            client.gui.setScreen(new WheelScreen());
+        }
     }
 
     /** Runs {@code /pets} - the plugin's own menu. */
@@ -257,7 +289,7 @@ final class QuickslotClient {
     }
 
     // ------------------------------------------------------------------------------------------------
-    // State for the screen, the HUD and the menu button
+    // State for the screens, the display and the menu button
     // ------------------------------------------------------------------------------------------------
 
     /** The server runs the plugin and allows this player to use quickslots through the mod. */
@@ -286,6 +318,33 @@ final class QuickslotClient {
     /** The slot (0-based) holding the pet, or -1. */
     static int slotOf(final String petId) {
         return slots().indexOf(petId);
+    }
+
+    /**
+     * Whether summoning the pet that is already out puts it away again - the server's choice. Assumed
+     * while there is no server to ask, because that is how the plugin comes configured.
+     */
+    static boolean sameSlotPutsAway() {
+        return state == null || state.sameSlotDespawns();
+    }
+
+    /** The pause the server asks for between two switches, in milliseconds; 0 if none or not connected. */
+    static int cooldownMillis() {
+        return state == null ? 0 : Math.max(0, state.cooldownMillis());
+    }
+
+    /** Milliseconds the server keeps quick switching locked for (too many switches), 0 if it does not. */
+    static long lockRemainingMillis() {
+        return Math.max(0L, lockedUntilMillis - Util.getMillis());
+    }
+
+    /** How much of the cooldown after the last switch is still to go, 1 (just switched) down to 0 (ready). */
+    static float cooldownRemaining() {
+        if (state == null || state.cooldownMillis() <= 0) {
+            return 0.0F;
+        }
+        final float elapsed = (Util.getMillis() - lastSwitchMillis) / (float) state.cooldownMillis();
+        return elapsed >= 1.0F ? 0.0F : 1.0F - Math.max(0.0F, elapsed);
     }
 
     /**

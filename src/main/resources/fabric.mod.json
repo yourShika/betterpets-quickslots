@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "betterpets-quickslots",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Better Pets Quickslots",
-  "description": "Client companion for servers running the Better Pets plugin: freely bindable keys to switch between your pets, a slot screen to choose them, and a Quickslots button in the /pets menu. Built with AI assistance.",
+  "description": "Client companion for servers running the Better Pets plugin: switch pets with a pet wheel, a modifier key or freely bindable keys, choose them in a slot screen, and set it all up in a settings screen with a live preview. Built with AI assistance.",
   "authors": [
     "yourShika"
   ],
@@ -18,8 +18,14 @@
   "entrypoints": {
     "client": [
       "de.yourshika.betterpets.quickslots.BetterPetsQuickslots"
+    ],
+    "modmenu": [
+      "de.yourshika.betterpets.quickslots.ModMenuIntegration"
     ]
   },
+  "mixins": [
+    "betterpets-quickslots.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.19.3",
     "minecraft": ">=26.2 <26.3",

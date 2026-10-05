@@ -10,7 +10,12 @@
 #
 #   bash build.sh && bash run-preview.sh
 #
-# Same environment overrides as build.sh, plus GUI_SCALE / LANGUAGE / WIDTH / HEIGHT.
+# Same environment overrides as build.sh, plus:
+#   GUI_SCALE / LANGUAGE / WIDTH / HEIGHT   what is rendered
+#   EXTRA_MODS   more mod jars to put into the test instance, separated by commas (with Mod Menu among
+#                them the run also checks that its configure button leads to the settings screen)
+#   HIDDEN=1     Windows only: run the game on a desktop of its own, so no window appears and nothing
+#                takes the focus away from what you are doing
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -40,6 +45,10 @@ RUN="run"
 rm -rf "$RUN/mods" "$RUN/screenshots" "$RUN/saves" "$RUN/preview-report.txt"
 mkdir -p "$RUN/mods" "$RUN/natives"
 cp "$MOD_JAR" "$FABRIC_API" "$RUN/mods/"
+if [ -n "${EXTRA_MODS:-}" ]; then
+  IFS=',' read -r -a extra_mods <<< "$EXTRA_MODS"
+  for extra in "${extra_mods[@]}"; do cp "$extra" "$RUN/mods/"; done
+fi
 # Skip the first-start prompts, stay silent and windowed.
 cat > "$RUN/options.txt" <<EOF
 onboardAccessibility:false
@@ -59,19 +68,35 @@ EOF
 } | tr -d '\r' > "$RUN/classpath.txt"
 printf -- '-cp "%s"\n' "$(paste -sd ';' "$RUN/classpath.txt")" > "$RUN/java-args.txt"
 
+GAME_ARGS=(-Xmx2G
+  --sun-misc-unsafe-memory-access=allow --enable-native-access=ALL-UNNAMED
+  -Djava.library.path=natives/java -Djna.tmpdir=natives/jna
+  -Dorg.lwjgl.system.SharedLibraryExtractPath=natives/lwjgl -Dio.netty.native.workdir=natives/netty
+  -Dbetterpets.quickslots.preview=../tools/preview-pets.tsv
+  @java-args.txt net.fabricmc.loader.impl.launch.knot.KnotClient
+  --username Preview --version "$PROFILE" --gameDir .
+  --assetsDir "$MCROOT/assets" --assetIndex "$ASSET_INDEX"
+  --uuid 00000000-0000-0000-0000-000000000000 --accessToken 0 --clientId 0 --xuid 0
+  --versionType release --width "$WIDTH" --height "$HEIGHT")
+
 echo "Starting Minecraft $MC_VERSION ($PROFILE) with $MOD_JAR ..."
 cd "$RUN"
 # The game's own exit code says nothing useful here; the report written by the preview does.
-"$JDK/bin/java" -Xmx2G \
-  --sun-misc-unsafe-memory-access=allow --enable-native-access=ALL-UNNAMED \
-  -Djava.library.path=natives/java -Djna.tmpdir=natives/jna \
-  -Dorg.lwjgl.system.SharedLibraryExtractPath=natives/lwjgl -Dio.netty.native.workdir=natives/netty \
-  -Dbetterpets.quickslots.preview=../tools/preview-pets.tsv \
-  @java-args.txt net.fabricmc.loader.impl.launch.knot.KnotClient \
-  --username Preview --version "$PROFILE" --gameDir . \
-  --assetsDir "$MCROOT/assets" --assetIndex "$ASSET_INDEX" \
-  --uuid 00000000-0000-0000-0000-000000000000 --accessToken 0 --clientId 0 --xuid 0 \
-  --versionType release --width "$WIDTH" --height "$HEIGHT" > game.log 2>&1 || true
+if [ "${HIDDEN:-0}" = "1" ]; then
+  # On a Windows desktop of its own (see tools/run-hidden.ps1). The command line goes through a file:
+  # every argument that holds a space is quoted for cmd.exe there.
+  {
+    printf 'cmd.exe /c ""%s"' "$(cygpath -w "$JDK/bin/java.exe")"
+    for arg in "${GAME_ARGS[@]}"; do
+      case "$arg" in *' '*) printf ' "%s"' "$arg" ;; *) printf ' %s' "$arg" ;; esac
+    done
+    printf ' > game.log 2>&1"'
+  } > hidden-command.txt
+  powershell -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$HERE/tools/run-hidden.ps1")" \
+    -WorkDir "$(pwd -W)" -CommandFile hidden-command.txt || true
+else
+  "$JDK/bin/java" "${GAME_ARGS[@]}" > game.log 2>&1 || true
+fi
 cd "$HERE"
 
 if [ ! -f "$RUN/preview-report.txt" ]; then
