@@ -1,6 +1,7 @@
 package de.yourshika.betterpets.quickslots;
 
 import de.yourshika.betterpets.quickslots.ui.Anim;
+import de.yourshika.betterpets.quickslots.ui.Draw;
 import de.yourshika.betterpets.quickslots.ui.Palette;
 import de.yourshika.betterpets.quickslots.ui.Sprites;
 import net.minecraft.client.Minecraft;
@@ -24,6 +25,7 @@ final class HudRenderer {
     private static final int GAP = 3;
     private static final int PADDING = 5;
     private static final int NAME_HEIGHT = 12;
+    private static final int NAME_WIDTH = 150;
     private static final int KEYS_HEIGHT = 9;
     private static final int EDGE = 6;
     private static final long POP_MILLIS = 340L;
@@ -311,7 +313,8 @@ final class HudRenderer {
         if (active == null) {
             graphics.centeredText(font, Component.translatable("betterpets-quickslots.hud.none"), centreX, y, Palette.fade(Palette.TEXT_DIM, alpha));
         } else {
-            graphics.centeredText(font, active.name(), centreX, y, Palette.rgb(active.colour(), alpha));
+            // The longest nickname the plugin allows is wider than the display it stands over.
+            graphics.centeredText(font, Draw.clip(font, Component.literal(active.name()), NAME_WIDTH), centreX, y, Palette.rgb(active.colour(), alpha));
         }
     }
 

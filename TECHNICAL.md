@@ -189,17 +189,27 @@ real channel with the pets from `tools/preview-pets.tsv`. `DevPreview` then walk
 mod as a script of timed steps, without any input from a person, and checks each one:
 
 - the handshake — state and pet list have to arrive on their own;
-- parking a pet with real clicks on a slot and a card, checked on both ends;
+- the slot screen: parking a pet with real clicks on a slot and a card (checked on both
+  ends), emptying by right-click, summoning by double-click, the search, giving a slot a key
+  and clearing it with <kbd>Esc</kbd>;
 - switching pets, and that a double press and a press during the cooldown send one request,
   and a press during a lock none (`PreviewServer` enforces nothing, so whatever reaches it is
   what the mod let through);
-- the wheel, both by click and by holding its key and letting go over a pet;
+- the wheel: by click, by holding its key and letting go over a pet, by a tap and a number
+  key, and closing it with its own key;
 - the modifier key with a number and with the mouse wheel — and that both leave the hotbar
-  alone, while without the modifier they are the game's;
-- the settings: a switch, a choice, a slider and dragging the display in the full-size
-  preview, each by clicking where the control is drawn;
+  alone, while without the modifier (or with that way switched off) they are the game's;
+- a slot's own key, next, previous, put away, and the keys that open the two screens;
+- the settings: a switch, a choice, a slider, the three ready-made layouts, capturing a key
+  by keyboard and by mouse button, tabs, reset with its second click, the full-size preview,
+  dragging the display there, and what <kbd>Esc</kbd> does in each state — each by clicking
+  where the control is drawn;
 - the button on the announced pet menu, its absence on an ordinary chest, and that the server
-  is told the chest was closed when the slot screen opens from it.
+  is told the chest was closed when the slot screen opens from it;
+- nonsense from the server (`PreviewServer.sendNonsense`): a name of 300 characters,
+  textures that are not textures, numbers at the edge of their range, slots naming pets
+  nobody has, a pet twice, a pet without an id — the display, the slot screen, the wheel and
+  the settings all have to draw it without falling over.
 
 Clicks and key presses go through the screens' own event methods and the game's key bindings;
 the mouse is moved and its wheel turned through the game's (private) mouse callbacks, so the

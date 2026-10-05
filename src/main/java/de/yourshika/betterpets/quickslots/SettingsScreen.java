@@ -1320,6 +1320,71 @@ class SettingsScreen extends Screen {
         return preview;
     }
 
+    Tab tab() {
+        return tab;
+    }
+
+    boolean showsFullPreview() {
+        return fullPreview;
+    }
+
+    /** A point on a tab. */
+    int[] pointOnTab(final Tab which) {
+        layout();
+        return new int[] {tabX(which.ordinal()) + tabWidth / 2, tabsY + TAB_HEIGHT / 2};
+    }
+
+    /** A point on one of the panel's buttons, by its label's language key (such as "reset"). */
+    int[] pointOnButton(final String key) {
+        final String label = Component.translatable(KEY + key).getString();
+        final String confirm = Component.translatable(KEY + key + ".confirm").getString();
+        for (final TextButton button : panelButtons) {
+            final String shown = button.getMessage().getString();
+            if (shown.equals(label) || shown.equals(confirm)) {
+                return new int[] {button.getX() + button.getWidth() / 2, button.getY() + button.getHeight() / 2};
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A point in the n-th row of the page, {@code share} of the way across it (0 = left edge, 1 = right) -
+     * for rows that are several things side by side. Scrolls the row into view like {@link #pointOnRow}.
+     */
+    int[] pointInRow(final int index, final float share) {
+        if (index < 0 || index >= rows.size()) {
+            return null;
+        }
+        int offset = 0;
+        for (int i = 0; i < index; i++) {
+            offset += rows.get(i).height() + ROW_GAP;
+        }
+        final Row row = rows.get(index);
+        if (offset < scrollShown) {
+            scroll = offset;
+        } else if (offset + row.height() > scrollShown + contentHeight) {
+            scroll = offset + row.height() - contentHeight;
+        }
+        scroll = Math.max(0.0F, Math.min(scroll, maxScroll()));
+        scrollShown = scroll;
+        int y = contentY - Math.round(scrollShown);
+        for (final Row placed : rows) {
+            placed.y = y + placed.height() > contentY && y < contentY + contentHeight ? y : Integer.MIN_VALUE;
+            y += placed.height() + ROW_GAP;
+        }
+        return new int[] {listX + Math.round(share * rowWidth), row.y + row.height() / 2};
+    }
+
+    /** The place in the list of the option made from a language key, or -1. */
+    int rowIndex(final String id) {
+        for (int i = 0; i < rows.size(); i++) {
+            if (id.equals(rows.get(i).id)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     /** Scrolls the list of the current page as far down as it goes, without the glide. */
     void scrollToEnd() {
         scroll = maxScroll();

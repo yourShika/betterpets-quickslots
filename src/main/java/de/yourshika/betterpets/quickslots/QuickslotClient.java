@@ -39,6 +39,11 @@ final class QuickslotClient {
     private static final long MENU_MARKER_MILLIS = 3000L;
     /** The least time between two switch requests, so a double press cannot outrun the server's answer. */
     private static final long MIN_REQUEST_GAP_MILLIS = 150L;
+    // What is shown of a pet at most, see tidy().
+    private static final int MAX_NAME_LENGTH = 40;
+    private static final int MAX_STARS = 10;
+    private static final int MAX_ABILITY_LINES = 3;
+    private static final int MAX_ABILITY_LINE_LENGTH = 180;
 
     private static QuickslotProtocol.State state;
     private static List<QuickslotProtocol.Pet> pets = List.of();
@@ -143,13 +148,44 @@ final class QuickslotClient {
 
     private static void accept(final QuickslotProtocol.Pets list) {
         final Map<String, QuickslotProtocol.Pet> byId = new HashMap<>();
+        final List<QuickslotProtocol.Pet> tidied = new ArrayList<>(list.pets().size());
         for (final QuickslotProtocol.Pet pet : list.pets()) {
-            byId.putIfAbsent(pet.id(), pet);
+            // A pet without an id cannot be parked (an empty id means "clear the slot"), and a player
+            // has one pet of a kind: anything else in the list is not shown.
+            if (pet.id().isEmpty() || byId.containsKey(pet.id())) {
+                continue;
+            }
+            final QuickslotProtocol.Pet tidy = tidy(pet);
+            byId.put(tidy.id(), tidy);
+            tidied.add(tidy);
         }
-        pets = list.pets();
+        pets = List.copyOf(tidied);
         petsById = byId;
         petsRevision = list.revision();
         petsKnown = true;
+    }
+
+    /**
+     * Cuts what a server sent about a pet down to what the screens are laid out for. The plugin never
+     * sends more (a nickname is 32 characters at most there) - but the plugin is not the only thing that
+     * can sit at the other end of the channel, and a name of a thousand characters should not get to
+     * cover the screen.
+     */
+    private static QuickslotProtocol.Pet tidy(final QuickslotProtocol.Pet pet) {
+        final StringBuilder ability = new StringBuilder();
+        int lines = 0;
+        for (final String line : pet.ability().split("\n")) {
+            if (!line.isBlank() && lines++ < MAX_ABILITY_LINES) {
+                ability.append(ability.isEmpty() ? "" : "\n").append(shorten(line.strip(), MAX_ABILITY_LINE_LENGTH));
+            }
+        }
+        return new QuickslotProtocol.Pet(pet.id(), shorten(pet.name().isBlank() ? pet.id() : pet.name(), MAX_NAME_LENGTH),
+            shorten(pet.typeName(), MAX_NAME_LENGTH), shorten(pet.rarity(), MAX_NAME_LENGTH), pet.color() & 0xFFFFFF, pet.level(),
+            Math.min(pet.stars(), MAX_STARS), pet.disabled(), pet.texture(), ability.toString());
+    }
+
+    private static String shorten(final String text, final int length) {
+        return text.length() <= length ? text : text.substring(0, length - 1) + "…";
     }
 
     // ------------------------------------------------------------------------------------------------

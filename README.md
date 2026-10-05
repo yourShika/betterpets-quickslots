@@ -234,15 +234,28 @@ What has been tried, and what hasn't:
 
 - ✅ **Minecraft 26.2 with Fabric Loader 0.19.3 and Fabric API 0.159.0** — `run-preview.sh`
   starts the actual game, and a stand-in for the plugin on the integrated server speaks the
-  real protocol to the mod. Checked there with real clicks and key presses at the places the
-  screens draw their controls: the handshake, parking a pet, switching pets, the wheel, the
-  switches, choices and sliders of the settings, dragging the display, that a double press
-  and a press during the cooldown send one request and a press during a lock none, and the
-  button on the pet menu (as well as its absence on any other chest). The pictures on this
-  page come from that run.
-- ⚠️ **Real keys held down by a real hand** — the preview presses keys through the game's own
-  key handling, but the wheel's hold-and-release and the modifier key with the mouse wheel
-  read the keyboard directly and have not been exercised by the automated run.
+  real protocol to the mod. 68 checks run there, with real clicks and key presses at the
+  places the screens draw their controls:
+  - the handshake;
+  - the slot screen: parking a pet, emptying a slot, summoning by double-click, the search,
+    giving a slot a key;
+  - the wheel by hold-and-release, by click, by a tap and a number key;
+  - the modifier key with a number and with the mouse wheel — and that the hotbar stays put,
+    while without the modifier both are the game's;
+  - a slot's own key, next, previous, put away, and the keys that open the screens;
+  - the spam guard: a double press and a press during the cooldown send one request, a press
+    during a lock none;
+  - the settings: every kind of control, the ready-made layouts, capturing a key (keyboard,
+    mouse button, <kbd>Esc</kbd>), reset, the full-size preview and dragging the display;
+  - the Mod Menu button, and the button on the pet menu (as well as its absence on any other
+    chest);
+  - and that nothing falls over when the server sends nonsense — names of absurd length,
+    textures that are not textures, slots naming pets nobody has.
+
+  The pictures on this page come from that run.
+- ⚠️ **Real keys held down by a real hand** — the run presses keys through the game's own key
+  handling, and "holds" one by answering the mod's question whether it is down. A real hand on
+  a real keyboard has not been part of it.
 - ⚠️ **Together with a real Better Pets server** — both sides share the protocol file byte for
   byte and the plugin has its own tests for it, but at the time of this release the two have
   not been played together by the author of these lines.

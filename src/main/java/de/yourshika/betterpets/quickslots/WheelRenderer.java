@@ -1,6 +1,7 @@
 package de.yourshika.betterpets.quickslots;
 
 import de.yourshika.betterpets.quickslots.ui.Anim;
+import de.yourshika.betterpets.quickslots.ui.Draw;
 import de.yourshika.betterpets.quickslots.ui.Palette;
 import de.yourshika.betterpets.quickslots.ui.Sprites;
 import net.minecraft.client.Minecraft;
@@ -165,12 +166,15 @@ final class WheelRenderer {
         if (scale < 0.6F || fade <= 0.1F) {
             return;
         }
-        final int plateWidth = Math.max(font.width(line), detail == null ? 0 : font.width(detail)) + 14;
+        // The plate has to stay inside the ring, however long a name is.
+        final int roomy = Math.max(70, Math.round(150.0F * scale));
+        final Component shown = Draw.clip(font, line, roomy);
+        final int plateWidth = Math.max(font.width(shown), detail == null ? 0 : font.width(detail)) + 14;
         final int plateHeight = detail == null ? 16 : 26;
         final int plateX = Math.round(centreX - plateWidth / 2.0F);
         final int plateY = Math.round(centreY + plateOffset);
         Sprites.draw(graphics, Sprites.CARD, plateX, plateY, plateWidth, plateHeight, Palette.fade(Palette.WHITE, fade));
-        graphics.centeredText(font, line, Math.round(centreX), plateY + 4, Palette.fade(colour, fade));
+        graphics.centeredText(font, shown, Math.round(centreX), plateY + 4, Palette.fade(colour, fade));
         if (detail != null) {
             graphics.centeredText(font, detail, Math.round(centreX), plateY + 14, Palette.fade(Palette.TEXT_DIM, fade));
         }

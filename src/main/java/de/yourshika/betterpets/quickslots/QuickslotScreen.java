@@ -17,6 +17,7 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -349,12 +350,29 @@ class QuickslotScreen extends Screen {
         graphics.pose().popMatrix();
 
         if (hoveredSlot >= 0) {
-            graphics.setComponentTooltipForNextFrame(font, slotTooltip(hoveredSlot), mouseX, realMouseY, Sprites.TOOLTIP_STYLE);
+            showTooltip(graphics, slotTooltip(hoveredSlot), mouseX, realMouseY);
         } else if (hoveredKey >= 0) {
-            graphics.setComponentTooltipForNextFrame(font, keyTooltip(hoveredKey), mouseX, realMouseY, Sprites.TOOLTIP_STYLE);
+            showTooltip(graphics, keyTooltip(hoveredKey), mouseX, realMouseY);
         } else if (hoveredCard >= 0) {
-            graphics.setComponentTooltipForNextFrame(font, petTooltip(visiblePets.get(hoveredCard)), mouseX, realMouseY, Sprites.TOOLTIP_STYLE);
+            showTooltip(graphics, petTooltip(visiblePets.get(hoveredCard)), mouseX, realMouseY);
         }
+    }
+
+    /**
+     * Shows a tooltip with its lines wrapped. The game does not wrap tooltips by itself, and a pet's
+     * ability can be a sentence of a hundred and fifty characters - far wider than the screen.
+     */
+    private void showTooltip(final GuiGraphicsExtractor graphics, final List<Component> lines, final int x, final int y) {
+        final int widest = Math.max(120, Math.min(230, width - 60));
+        final List<FormattedCharSequence> wrapped = new ArrayList<>();
+        for (final Component line : lines) {
+            if (line.getString().isEmpty()) {
+                wrapped.add(FormattedCharSequence.EMPTY);
+            } else {
+                wrapped.addAll(font.split(line, widest));
+            }
+        }
+        graphics.setTooltipForNextFrame(font, wrapped, x, y, Sprites.TOOLTIP_STYLE);
     }
 
     private void drawSlot(final GuiGraphicsExtractor graphics, final SlotView view, final boolean hovered, final float delta) {
@@ -705,5 +723,22 @@ class QuickslotScreen extends Screen {
     int[] pointOnSlot(final int slot) {
         layout();
         return new int[] {slotX(slot) + SLOT_SIZE / 2, slotBarY + SLOT_SIZE / 2};
+    }
+
+    /** A point on the key shown under a slot. */
+    int[] pointOnKey(final int slot) {
+        layout();
+        return new int[] {slotX(slot) + SLOT_SIZE / 2, keysY + Draw.KEY_CAP_HEIGHT / 2};
+    }
+
+    /** Types into the search field. */
+    void searchFor(final String text) {
+        search.setValue(text);
+    }
+
+    /** How many pets the list shows with the search as it is. */
+    int shownPets() {
+        layout();
+        return visiblePets.size();
     }
 }

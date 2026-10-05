@@ -5,6 +5,7 @@ import com.mojang.blaze3d.platform.Window;
 import de.kamil.betterpets.quickslots.QuickslotProtocol;
 import de.yourshika.betterpets.quickslots.ui.TextButton;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.entrypoint.EntrypointContainer;
@@ -196,8 +197,11 @@ final class DevPreview {
         wheel();
         keyboard();
         settings();
+        settingsControls();
         films();
+        keysMore();
         menuButton();
+        nonsense();
     }
 
     private static void slotScreen() {
@@ -216,6 +220,60 @@ final class DevPreview {
         then("assign arrived", ROUND_TRIP_TICKS, client -> {
             check("assign: a click on slot 4 and on a pet parked " + pets.get(3).id() + " there on the server", PreviewServer.slot(3).equals(pets.get(3).id()));
             check("assign: the client shows it there", QuickslotClient.slotOf(pets.get(3).id()) == 3);
+        });
+        slotScreenMore();
+    }
+
+    /** What the slot screen can do besides parking a pet: emptying, summoning, searching, giving a slot a key. */
+    private static void slotScreenMore() {
+        then("right-click the parked pet's card", 2, client -> click(client.gui.screen(), slots(client).pointOnCard(3), 1));
+        then("card right-click arrived", ROUND_TRIP_TICKS, client -> {
+            check("slot screen: a right-click on a parked pet takes it out of its slot",
+                PreviewServer.slot(3).isEmpty() && QuickslotClient.slotOf(pets.get(3).id()) < 0);
+            click(client.gui.screen(), slots(client).pointOnSlot(2), 1);
+        });
+        then("slot right-click arrived", ROUND_TRIP_TICKS, client -> {
+            check("slot screen: a right-click on a slot empties it", PreviewServer.slot(2).isEmpty());
+            // That slot is the chosen one now, so the next pet clicked goes into it.
+            click(client.gui.screen(), slots(client).pointOnCard(2), 0);
+        });
+        then("refilled", ROUND_TRIP_TICKS, client -> {
+            check("slot screen: the slot just emptied is the chosen one and takes the next pet clicked", PreviewServer.slot(2).equals(pets.get(2).id()));
+            final int[] slot = slots(client).pointOnSlot(0);
+            client.gui.screen().mouseClicked(mouse(slot[0], slot[1], 0), true);
+        });
+        then("double-click arrived", ROUND_TRIP_TICKS, client ->
+            check("slot screen: a double-click on a slot summons its pet", PreviewServer.active().equals(pets.get(0).id())));
+        // Back to the second pet, which the rest of the run starts from.
+        then("double-click the second slot", 6, client -> {
+            final int[] slot = slots(client).pointOnSlot(1);
+            client.gui.screen().mouseClicked(mouse(slot[0], slot[1], 0), true);
+        });
+        then("search", ROUND_TRIP_TICKS, client -> {
+            check("slot screen: the second double-click brought the second pet back", PreviewServer.active().equals(pets.get(1).id()));
+            slots(client).searchFor("pan");
+        });
+        then("searched", 2, client -> {
+            final long matching = pets.stream().filter(pet -> (pet.name() + " " + pet.typeName() + " " + pet.rarity()).toLowerCase(Locale.ROOT).contains("pan")).count();
+            check("slot screen: the search narrows the list to the " + matching + " pet(s) that match", matching > 0 && slots(client).shownPets() == matching);
+            slots(client).searchFor("");
+            click(client.gui.screen(), slots(client).pointOnKey(0), 0);
+        });
+        then("press G for slot 1", 2, client -> client.gui.screen().keyPressed(new KeyEvent(GLFW.GLFW_KEY_G, 0, 0)));
+        then("slot 1 has a key", 2, client -> {
+            check("slot screen: clicking the key under a slot and pressing a key gives the slot that key", boundTo(Keybinds.SLOTS[0], GLFW.GLFW_KEY_G));
+            click(client.gui.screen(), slots(client).pointOnKey(0), 0);
+            client.gui.screen().keyPressed(new KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        });
+        then("cleared with Esc", 2, client -> {
+            check("slot screen: Esc while a key is being chosen clears it and leaves the screen open",
+                Keybinds.SLOTS[0].isUnbound() && client.gui.screen() instanceof QuickslotScreen);
+            // Slot 4 gets its pet back: the pictures further on are taken with it.
+            click(client.gui.screen(), slots(client).pointOnSlot(3), 0);
+            click(client.gui.screen(), slots(client).pointOnCard(3), 0);
+        });
+        then("slot 4 filled again", ROUND_TRIP_TICKS, client -> {
+            check("slot screen: slot 4 holds its pet again", PreviewServer.slot(3).equals(pets.get(3).id()));
             client.gui.setScreen(null);
         });
     }
@@ -451,6 +509,209 @@ final class DevPreview {
         });
     }
 
+    /** The controls of the settings the pictures above did not touch: layouts, key capture, tabs, reset, Esc. */
+    private static void settingsControls() {
+        then("open the settings again", 4, client -> client.gui.setScreen(new SettingsScreen(null) {
+            @Override
+            public void extractRenderState(final GuiGraphicsExtractor graphics, final int mouseX, final int mouseY, final float partialTick) {
+                super.extractRenderState(graphics, hoverX, hoverY, partialTick);
+            }
+        }));
+        // The three ready-made layouts are one row of buttons, right under the first heading.
+        then("numpad layout", 6, client -> click(config(client), config(client).pointInRow(1, 0.5F), 0));
+        then("wheel-only layout", 2, client -> {
+            check("settings: the numpad layout puts the slots and next / previous / put away on the keypad",
+                boundTo(Keybinds.SLOTS[0], GLFW.GLFW_KEY_KP_1) && boundTo(Keybinds.SLOTS[8], GLFW.GLFW_KEY_KP_9)
+                    && boundTo(Keybinds.next, GLFW.GLFW_KEY_KP_ADD) && boundTo(Keybinds.previous, GLFW.GLFW_KEY_KP_SUBTRACT)
+                    && boundTo(Keybinds.putAway, GLFW.GLFW_KEY_KP_0));
+            click(config(client), config(client).pointInRow(1, 0.9F), 0);
+        });
+        then("no-numpad layout", 2, client -> {
+            check("settings: the wheel-only layout clears every key but the wheel's",
+                Keybinds.SLOTS[0].isUnbound() && Keybinds.next.isUnbound() && Keybinds.modifier.isUnbound() && boundTo(Keybinds.wheel, GLFW.GLFW_KEY_R));
+            click(config(client), config(client).pointInRow(1, 0.1F), 0);
+        });
+        then("capture keys", 2, client -> {
+            check("settings: the no-numpad layout is the wheel on R and the modifier on Left Alt",
+                Keybinds.SLOTS[0].isUnbound() && boundTo(Keybinds.modifier, GLFW.GLFW_KEY_LEFT_ALT) && boundTo(Keybinds.wheel, GLFW.GLFW_KEY_R));
+            final SettingsScreen screen = config(client);
+            click(screen, screen.pointOnRow("keys.wheel.key"), 0);
+            screen.keyPressed(new KeyEvent(GLFW.GLFW_KEY_G, 0, 0));
+            check("settings: clicking a key and pressing another one rebinds it", boundTo(Keybinds.wheel, GLFW.GLFW_KEY_G));
+            click(screen, screen.pointOnRow("keys.wheel.key"), 1);
+            check("settings: a right-click on a key clears it", Keybinds.wheel.isUnbound());
+            click(screen, screen.pointOnRow("keys.wheel.key"), 0);
+            screen.mouseClicked(mouse(5, 5, 3), false);
+            check("settings: a mouse button can be bound, too", KeyMappingHelper.getBoundKeyOf(Keybinds.wheel).equals(InputConstants.Type.MOUSE.getOrCreate(3)));
+            click(screen, screen.pointOnRow("keys.wheel.key"), 0);
+            screen.keyPressed(new KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+            check("settings: Esc while a key is being chosen clears it and leaves the settings open",
+                Keybinds.wheel.isUnbound() && client.gui.screen() == screen);
+            click(screen, screen.pointOnRow("keys.wheel.key"), 0);
+            screen.keyPressed(new KeyEvent(GLFW.GLFW_KEY_R, 0, 0));
+            // The nine slot keys sit three to a row; the first of those rows is two below this switch.
+            final int slotKeys = screen.rowIndex("keys.modifier.scroll") + 2;
+            click(screen, screen.pointInRow(slotKeys, 0.5F), 0);
+            screen.keyPressed(new KeyEvent(GLFW.GLFW_KEY_H, 0, 0));
+            check("settings: the key of a single slot is set in its own cell", boundTo(Keybinds.SLOTS[1], GLFW.GLFW_KEY_H) && Keybinds.SLOTS[0].isUnbound());
+            click(screen, screen.pointInRow(slotKeys, 0.5F), 1);
+            check("settings: and cleared there with a right-click", Keybinds.SLOTS[1].isUnbound() && boundTo(Keybinds.wheel, GLFW.GLFW_KEY_R));
+            click(screen, screen.pointOnTab(SettingsScreen.Tab.LOOK), 0);
+        });
+        then("tab, reset, full size, Esc", 2, client -> {
+            final SettingsScreen screen = config(client);
+            check("settings: a click on a tab shows its page", screen.tab() == SettingsScreen.Tab.LOOK);
+            ModConfig.get().hudAlways = true;
+            ModConfig.changed();
+            click(screen, screen.pointOnButton("reset"), 0);
+            check("settings: one click on 'reset' only asks", ModConfig.get().hudAlways);
+            click(screen, screen.pointOnButton("reset"), 0);
+            check("settings: the second click resets", !ModConfig.get().hudAlways);
+            click(screen, screen.pointOnButton("preview.full"), 0);
+            check("settings: 'full size' shows the preview across the screen", screen.showsFullPreview());
+            screen.keyPressed(new KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+            check("settings: Esc leaves the full-size preview, not the settings", !screen.showsFullPreview() && client.gui.screen() == screen);
+            screen.keyPressed(new KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        });
+        then("settings closed", 2, client -> check("settings: Esc closes them", client.gui.screen() == null));
+    }
+
+    /** The keys the earlier parts did not press: a slot's own key, next / previous / put away, the screens, the wheel's other ways. */
+    private static void keysMore() {
+        then("'switch with 1-9' off", 6, client -> {
+            ModConfig.get().modifierNumbers = false;
+            ModConfig.changed();
+            client.player.getInventory().setSelectedSlot(6);
+            requestsBefore = PreviewServer.switchRequests();
+            press(GLFW.GLFW_KEY_LEFT_ALT);
+        });
+        then("press 3 with the modifier", 2, client -> press(GLFW.GLFW_KEY_3));
+        then("the 3 went to the hotbar", 4, client -> {
+            release(GLFW.GLFW_KEY_3);
+            release(GLFW.GLFW_KEY_LEFT_ALT);
+            check("modifier key: with 'switch with 1-9' turned off the numbers stay the hotbar's",
+                PreviewServer.switchRequests() == requestsBefore && client.player.getInventory().getSelectedSlot() == 2);
+            ModConfig.reset();
+            Keybinds.bind(Keybinds.SLOTS[1], key(GLFW.GLFW_KEY_G));
+            Keybinds.bind(Keybinds.next, key(GLFW.GLFW_KEY_H));
+            Keybinds.bind(Keybinds.previous, key(GLFW.GLFW_KEY_J));
+            Keybinds.bind(Keybinds.putAway, key(GLFW.GLFW_KEY_U));
+            Keybinds.bind(Keybinds.openSettings, key(GLFW.GLFW_KEY_O));
+        });
+        then("the key of slot 2", 14, client -> {
+            requestsBefore = PreviewServer.switchRequests();
+            press(GLFW.GLFW_KEY_G);
+        });
+        then("slot key arrived", ROUND_TRIP_TICKS, client -> {
+            release(GLFW.GLFW_KEY_G);
+            check("direct keys: a slot's own key summons its pet", PreviewServer.switchRequests() == requestsBefore + 1 && PreviewServer.active().equals(pets.get(1).id()));
+        });
+        then("next", 6, client -> press(GLFW.GLFW_KEY_H));
+        then("next arrived", ROUND_TRIP_TICKS, client -> {
+            release(GLFW.GLFW_KEY_H);
+            check("direct keys: 'next' steps on to the pet of the next slot", PreviewServer.active().equals(pets.get(2).id()));
+        });
+        then("previous", 6, client -> press(GLFW.GLFW_KEY_J));
+        then("previous arrived", ROUND_TRIP_TICKS, client -> {
+            release(GLFW.GLFW_KEY_J);
+            check("direct keys: 'previous' steps back", PreviewServer.active().equals(pets.get(1).id()));
+        });
+        then("put away", 6, client -> press(GLFW.GLFW_KEY_U));
+        then("put away arrived", ROUND_TRIP_TICKS, client -> {
+            release(GLFW.GLFW_KEY_U);
+            check("direct keys: 'put away' leaves no pet out", PreviewServer.active().isEmpty() && QuickslotClient.activeId().isEmpty());
+        });
+
+        then("the slot screen's key", 2, client -> press(GLFW.GLFW_KEY_K));
+        then("slot screen open", 4, client -> {
+            release(GLFW.GLFW_KEY_K);
+            check("keys: K opens the slot screen", client.gui.screen() instanceof QuickslotScreen);
+        });
+        then("K again", 4, client -> client.gui.screen().keyPressed(new KeyEvent(GLFW.GLFW_KEY_K, 0, 0)));
+        then("the settings' key", 2, client -> {
+            check("keys: and K closes it again", client.gui.screen() == null);
+            press(GLFW.GLFW_KEY_O);
+        });
+        then("settings open", 4, client -> {
+            release(GLFW.GLFW_KEY_O);
+            check("keys: the settings open with their own key", client.gui.screen() instanceof SettingsScreen);
+        });
+        then("O again", 4, client -> client.gui.screen().keyPressed(new KeyEvent(GLFW.GLFW_KEY_O, 0, 0)));
+
+        // A tap instead of a hold leaves the wheel open; then a number key or a click chooses.
+        then("tap the wheel's key", 2, client -> {
+            check("keys: and close with it", client.gui.screen() == null);
+            press(GLFW.GLFW_KEY_R);
+        });
+        then("let go at once", 1, client -> release(GLFW.GLFW_KEY_R));
+        then("the wheel stayed open", 10, client -> {
+            check("pet wheel: a short tap of its key leaves it open", client.gui.screen() instanceof WheelScreen);
+            client.gui.screen().keyPressed(new KeyEvent(GLFW.GLFW_KEY_2, 0, 0));
+        });
+        then("tap it once more", ROUND_TRIP_TICKS, client -> {
+            check("pet wheel: a number key chooses that slot and closes it", client.gui.screen() == null && PreviewServer.active().equals(pets.get(1).id()));
+            press(GLFW.GLFW_KEY_R);
+        });
+        then("let go at once again", 1, client -> release(GLFW.GLFW_KEY_R));
+        then("close it with its key", 10, client -> client.gui.screen().keyPressed(new KeyEvent(GLFW.GLFW_KEY_R, 0, 0)));
+        then("keys back to normal", 2, client -> {
+            check("pet wheel: its key closes an open wheel without choosing anything", client.gui.screen() == null && PreviewServer.active().equals(pets.get(1).id()));
+            Keybinds.applyPreset(Keybinds.Preset.MODIFIER);
+            Keybinds.bind(Keybinds.openSettings, InputConstants.UNKNOWN);
+        });
+    }
+
+    /** What arrives from a server is not to be trusted: rubbish must not take the game down. */
+    private static void nonsense() {
+        then("nonsense from the server", 4, client -> {
+            client.gui.setScreen(null);
+            server(client, () -> PreviewServer.sendNonsense(serverPlayer(client)));
+            ModConfig.get().hudAlways = true;
+            ModConfig.get().hudKeys = true;
+            ModConfig.adjusting();
+        });
+        shot(10, "nonsense-display.png");
+        then("as a ring", 0, client -> {
+            ModConfig.get().hudStyle = ModConfig.HudStyle.WHEEL;
+            ModConfig.adjusting();
+        });
+        then("compact", 6, client -> {
+            ModConfig.get().hudStyle = ModConfig.HudStyle.COMPACT;
+            ModConfig.adjusting();
+        });
+        then("the slot screen with it", 6, client -> client.gui.setScreen(new QuickslotScreen() {
+            @Override
+            public void extractRenderState(final GuiGraphicsExtractor graphics, final int mouseX, final int mouseY, final float partialTick) {
+                super.extractRenderState(graphics, hoverX, hoverY, partialTick);
+            }
+        }));
+        then("hover the worst of them", 20, client -> hover(slots(client).pointOnCard(0)));
+        shot(6, "nonsense-screen.png");
+        then("the wheel with it", 0, client -> {
+            ModConfig.get().wheelHold = false;
+            client.gui.setScreen(new WheelScreen() {
+                @Override
+                public void extractRenderState(final GuiGraphicsExtractor graphics, final int mouseX, final int mouseY, final float partialTick) {
+                    super.extractRenderState(graphics, hoverX, hoverY, partialTick);
+                }
+            });
+            pointFromCentre(client, -90.0, 70.0);
+        });
+        shot(14, "nonsense-wheel.png");
+        then("the settings with it", 0, client -> {
+            hoverAway();
+            client.gui.setScreen(new SettingsScreen(null));
+            config(client).showTab(SettingsScreen.Tab.DISPLAY);
+        });
+        shot(20, "nonsense-settings.png");
+        then("back to sense", 0, client -> {
+            check("robustness: display, slot screen, wheel and settings all survive nonsense from the server", client.gui.screen() instanceof SettingsScreen);
+            client.gui.setScreen(null);
+            ModConfig.reset();
+            server(client, () -> PreviewServer.sendSane(serverPlayer(client)));
+        });
+    }
+
     /**
      * Two short films, as runs of screenshots in {@code screenshots/film/}: the wheel being used, and the
      * settings being worked. No checks here - this is for looking at how things move.
@@ -607,6 +868,11 @@ final class DevPreview {
 
     private static InputConstants.Key key(final int glfwKey) {
         return InputConstants.Type.KEYSYM.getOrCreate(glfwKey);
+    }
+
+    /** Whether a key binding sits on a key of the keyboard right now. */
+    private static boolean boundTo(final KeyMapping mapping, final int glfwKey) {
+        return KeyMappingHelper.getBoundKeyOf(mapping).equals(key(glfwKey));
     }
 
     /** Presses a key and keeps it down: the bindings on it get their click, and the key reads as held. */

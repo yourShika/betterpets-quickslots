@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "betterpets-quickslots",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "name": "Better Pets Quickslots",
   "description": "Client companion for servers running the Better Pets plugin: switch pets with a pet wheel, a modifier key or freely bindable keys, choose them in a slot screen, and set it all up in a settings screen with a live preview. Built with AI assistance.",
   "authors": [

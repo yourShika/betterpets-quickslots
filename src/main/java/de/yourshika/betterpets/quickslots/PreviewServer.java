@@ -58,6 +58,34 @@ final class PreviewServer {
         return switchRequests;
     }
 
+    /** The pet that is out, as the "server" has it ("" for none). */
+    static synchronized String active() {
+        return active;
+    }
+
+    /**
+     * Sends the player a pet list and a state no sane server would: names of absurd length, textures that
+     * are not textures, numbers at the edge of their range, slots naming pets nobody has, the same pet
+     * twice, a pet without an id. The mod has to live with whatever arrives. Call on the server thread.
+     */
+    static synchronized void sendNonsense(final ServerPlayer player) {
+        final String endless = "W".repeat(300);
+        final List<QuickslotProtocol.Pet> odd = List.of(
+            new QuickslotProtocol.Pet("weird", endless, "", "", 0xFFFFFFFF, 65535, 255, false, "!!! not base64 !!!", (endless + "\n").repeat(12)),
+            new QuickslotProtocol.Pet("bare", "", "", "", 0, 0, 0, false, "", ""),
+            new QuickslotProtocol.Pet("weird", "Twin", "Twin", "Twin", -1, 1, 1, true, "e30=", "\n\n\n"),
+            new QuickslotProtocol.Pet("", "No id", "x", "y", 0x123456, 5, 9, false, "AAAA", "ability"));
+        send(player, new QuickslotProtocol.Pets(1, odd));
+        send(player, new QuickslotProtocol.State(QuickslotProtocol.VERSION, true,
+            List.of("weird", "bare", "gone", "weird", "", "bare", "weird", "weird", "weird"), "weird", -5, false, 1, -1));
+    }
+
+    /** Puts things back the way a sane server has them. Call on the server thread. */
+    static synchronized void sendSane(final ServerPlayer player) {
+        send(player, new QuickslotProtocol.Pets(pets.hashCode(), pets));
+        sendState(player);
+    }
+
     /**
      * Tells the player that quick switching is locked for a while (0 lifts the lock), the way the plugin
      * does after too many switches. Call on the server thread.
