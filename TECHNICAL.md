@@ -106,7 +106,9 @@ cooldown and spam protection itself and caps the messages it accepts per second.
 Nothing uses the game's stock widgets for its look. `tools/make_sprites.py` draws the panels,
 slots, switches, sliders, key caps and the wheel as GUI sprites in the colours of the Better
 Pets menu artwork (the stretchable ones are nine-sliced through their `.mcmeta`), and copies
-the icons and characters over from that artwork. `ui/Sprites` names them, `ui/Draw` holds the
+the icons and characters over from that artwork — the moon fox and the star dragon it cuts
+out of the Ascension menu picture, because their ready-made sprites are clipped at the ears.
+`ui/Sprites` names them, `ui/Draw` holds the
 shared drawing helpers, `ui/TextButton` is a regular game button with the mod's look, and the
 tooltips get their own background through a tooltip style (`tooltip/wood_*`).
 

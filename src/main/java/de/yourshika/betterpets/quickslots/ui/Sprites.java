@@ -71,14 +71,13 @@ public final class Sprites {
     public static final Identifier ICON_KEYS = id("icon/keys");
     public static final Identifier ICON_WHEEL = id("icon/wheel");
 
-    // --- the characters that lean on the panels (about 70 x 60 each) ---
-    public static final Identifier CHARACTER_FOX = id("character/fox");
-    public static final Identifier CHARACTER_OTTER = id("character/otter");
-    public static final Identifier CHARACTER_CAT = id("character/cat");
-    public static final Identifier CHARACTER_OWL = id("character/owl");
-    public static final Identifier CHARACTER_DRAGON = id("character/dragon");
-    public static final Identifier CHARACTER_MOON_FOX = id("character/moon_fox");
-    public static final Identifier CHARACTER_STAR_DRAGON = id("character/star_dragon");
+    // --- the characters that lean on the panels and stand by the wheel ---
+    public static final Identifier CHARACTER_FOX = id("character/fox");       // 70 x 63
+    public static final Identifier CHARACTER_OTTER = id("character/otter");   // 70 x 59
+    public static final Identifier CHARACTER_CAT = id("character/cat");       // 70 x 60
+    public static final Identifier CHARACTER_OWL = id("character/owl");       // 70 x 73
+    public static final Identifier CHARACTER_MOON_FOX = id("character/moon_fox");       // 68 x 62
+    public static final Identifier CHARACTER_STAR_DRAGON = id("character/star_dragon"); // 68 x 59
 
     /**
      * The mod's tooltip look. Not a sprite itself: the game derives the two it draws a tooltip with from

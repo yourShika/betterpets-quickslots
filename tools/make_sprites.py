@@ -586,15 +586,73 @@ ICONS = {
     "icon/rank": "BetterPets_Extra_Icons/icons_16x16/your_rank.png",
 }
 
+# Only the four ready-made animals that are whole. The folder has four more (the second fox, the two
+# dragons and the moon fox), but those are taller than the strip they were cut from and lost the tips of
+# their ears and horns to its upper edge. The moon fox and the star dragon are taken whole out of the
+# newer Ascension menu picture instead, see cut_out_ascension_pair().
 CHARACTERS = {
     "character/fox": "main_left.png",
     "character/otter": "main_right.png",
     "character/cat": "catalogue_left.png",
     "character/owl": "catalogue_right.png",
-    "character/dragon": "customization_right.png",
-    "character/moon_fox": "ascension_left.png",
-    "character/star_dragon": "ascension_right.png",
 }
+
+
+def cut_out_ascension_pair():
+    """
+    The moon fox and the star dragon, cut out of the Ascension menu picture.
+
+    ascension_320.png has both of them whole, but holding on to the panel between them: their paws lie
+    over its border. The same panel with nothing in the way at those rows is in ascension_256.png, 32
+    pixels further left. So an animal is everything opaque beside the panel that hangs together, plus
+    the panel pixels next to it that differ from the clean panel.
+    """
+    wide = Image.open(os.path.join(ART, "ascension_320.png")).convert("RGBA")
+    clean = Image.open(os.path.join(ART, "ascension_256.png")).convert("RGBA")
+    panel_left, panel_right, shift, reach = 72, 248, 32, 6
+
+    def on_panel(x):
+        return panel_left <= x < panel_right
+
+    def animal(x, y):
+        """Whether this pixel of the wide picture can belong to an animal."""
+        if not (0 <= x < wide.width and 0 <= y < wide.height) or wide.getpixel((x, y))[3] == 0:
+            return False
+        if not on_panel(x):
+            return True
+        # on the panel: only close to its edge, and only where the picture is not simply the panel
+        near_edge = x < panel_left + reach or x >= panel_right - reach
+        return near_edge and wide.getpixel((x, y)) != clean.getpixel((x - shift, y))
+
+    def grow(start):
+        seen, queue = {start}, [start]
+        while queue:
+            x, y = queue.pop()
+            for step in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if step not in seen and animal(*step):
+                    seen.add(step)
+                    queue.append(step)
+        return seen
+
+    for name, columns in (("character/moon_fox", range(0, panel_left)), ("character/star_dragon", range(panel_right, wide.width))):
+        # the animal is by far the largest thing beside the panel (the tabs on the right are small)
+        best, visited = set(), set()
+        for x in columns:
+            for y in range(wide.height):
+                if (x, y) not in visited and animal(x, y):
+                    blob = grow((x, y))
+                    visited |= blob
+                    if len(blob) > len(best):
+                        best = blob
+        xs, ys = [x for x, _ in best], [y for _, y in best]
+        sprite = new(max(xs) - min(xs) + 1, max(ys) - min(ys) + 1)
+        for x, y in best:
+            sprite.putpixel((x - min(xs), y - min(ys)), wide.getpixel((x, y)))
+        # the whole point: no flat cut along the top any more
+        tip = sum(1 for x in range(sprite.width) if sprite.getpixel((x, 0))[3] > 0)
+        assert tip <= 4, f"{name} is cut off at the top ({tip} pixels wide there)"
+        save(sprite, name)
+        print(f"  {name}: {sprite.width} x {sprite.height}")
 
 
 def copy_artwork():
@@ -608,6 +666,7 @@ def copy_artwork():
         save(icon, name)
     for name, source in CHARACTERS.items():
         save(Image.open(os.path.join(ART, "BetterPets_UI_Assets (1)", "characters", source)).convert("RGBA"), name)
+    cut_out_ascension_pair()
 
 
 def main():

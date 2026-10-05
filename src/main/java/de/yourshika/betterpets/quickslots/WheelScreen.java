@@ -57,13 +57,13 @@ class WheelScreen extends Screen {
         pointed = WheelRenderer.pointedSlot(mouseX - centreX, mouseY - centreY, slots.size(), scale);
 
         if (ModConfig.get().decorations && width > WheelRenderer.EXTENT * scale + 190) {
-            // Two onlookers, swaying gently and half a beat apart.
+            // Two onlookers, swaying gently and half a beat apart, their feet on one line.
             final float fade = Anim.outCubic(Anim.progress(motion.openedAt, 220L));
             final float sway = (Anim.wave(2600L) - 0.5F) * 3.0F;
             final float half = WheelRenderer.EXTENT * scale / 2.0F;
-            Sprites.draw(graphics, Sprites.CHARACTER_MOON_FOX, Math.round(centreX - half - 76 - (1.0F - fade) * 20), Math.round(centreY - 20 + sway), 70, 62,
+            Sprites.draw(graphics, Sprites.CHARACTER_MOON_FOX, Math.round(centreX - half - 74 - (1.0F - fade) * 20), Math.round(centreY - 20 + sway), 68, 62,
                 Palette.fade(Palette.WHITE, fade));
-            Sprites.draw(graphics, Sprites.CHARACTER_STAR_DRAGON, Math.round(centreX + half + 6 + (1.0F - fade) * 20), Math.round(centreY - 22 - sway), 70, 64,
+            Sprites.draw(graphics, Sprites.CHARACTER_STAR_DRAGON, Math.round(centreX + half + 6 + (1.0F - fade) * 20), Math.round(centreY - 17 - sway), 68, 59,
                 Palette.fade(Palette.WHITE, fade));
         }
 
