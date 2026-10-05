@@ -1,0 +1,4 @@
+build/
+*.jar
+run/
+__pycache__/

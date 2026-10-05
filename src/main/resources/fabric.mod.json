@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "betterpets-quickslots",
+  "version": "1.0.0",
+  "name": "Better Pets Quickslots",
+  "description": "Client companion for servers running the Better Pets plugin: freely bindable keys to switch between your pets, a slot screen to choose them, and a Quickslots button in the /pets menu. Built with AI assistance.",
+  "authors": [
+    "yourShika"
+  ],
+  "contact": {
+    "homepage": "https://github.com/yourShika/betterpets-quickslots",
+    "sources": "https://github.com/yourShika/betterpets-quickslots",
+    "issues": "https://github.com/yourShika/betterpets-quickslots/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/betterpets-quickslots/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "de.yourshika.betterpets.quickslots.BetterPetsQuickslots"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": ">=26.2 <26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
